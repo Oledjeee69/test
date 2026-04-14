@@ -13,7 +13,6 @@ type Repository interface {
 	Update(ctx context.Context, task *taskdomain.Task) (*taskdomain.Task, error)
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context) ([]taskdomain.Task, error)
-	ListTemplates(ctx context.Context) ([]taskdomain.Task, error)
 }
 
 type Usecase interface {
