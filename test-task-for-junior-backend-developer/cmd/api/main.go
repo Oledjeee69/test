@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	infrastructurepostgres "example.com/taskservice/internal/infrastructure/postgres"
 	postgresrepo "example.com/taskservice/internal/repository/postgres"
 	transporthttp "example.com/taskservice/internal/transport/http"
@@ -34,6 +36,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+
+	if err := ensureSchema(ctx, pool); err != nil {
+		logger.Error("apply schema", "error", err)
+		os.Exit(1)
+	}
 
 	taskRepo := postgresrepo.New(pool)
 	taskUsecase := task.NewService(taskRepo)
@@ -72,8 +79,17 @@ type config struct {
 }
 
 func loadConfig() config {
+	httpAddr := os.Getenv("HTTP_ADDR")
+	if httpAddr == "" {
+		if port := os.Getenv("PORT"); port != "" {
+			httpAddr = ":" + port
+		} else {
+			httpAddr = ":8080"
+		}
+	}
+
 	cfg := config{
-		HTTPAddr:    envOrDefault("HTTP_ADDR", ":8080"),
+		HTTPAddr:    httpAddr,
 		DatabaseDSN: envOrDefault("DATABASE_DSN", "postgres://postgres:postgres@localhost:5432/taskservice?sslmode=disable"),
 	}
 
@@ -90,4 +106,26 @@ func envOrDefault(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func ensureSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	const schemaSQL = `
+CREATE TABLE IF NOT EXISTS tasks (
+	id BIGSERIAL PRIMARY KEY,
+	title TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL,
+	recurrence JSONB NULL,
+	source_task_id BIGINT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+	scheduled_for DATE NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_source_task_id_scheduled_for ON tasks (source_task_id, scheduled_for) WHERE source_task_id IS NOT NULL AND scheduled_for IS NOT NULL;
+`
+
+	_, err := pool.Exec(ctx, schemaSQL)
+	return err
 }
