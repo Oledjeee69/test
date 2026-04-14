@@ -7,7 +7,12 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080"
+      "url": "https://test-production-f090.up.railway.app",
+      "description": "Демо (Railway)"
+    },
+    {
+      "url": "http://localhost:8080",
+      "description": "Локально (Docker Compose)"
     }
   ],
   "tags": [
